@@ -48,6 +48,7 @@ jobs:
           ASAN_OPTIONS: "detect_leaks=0"
         run: |
           bazel build //indexer:scip-clang --config=dev
+          mkdir -p e2e/out
           e2e/run.sh | tee e2e/out/roles.txt
           grep -q ' write ' e2e/out/roles.txt
           grep -q ' read+write ' e2e/out/roles.txt
