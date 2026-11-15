@@ -14,6 +14,7 @@
 
 #include "clang/AST/RawCommentList.h"
 #include "clang/Basic/SourceLocation.h"
+#include "llvm/ADT/DenseMap.h"
 
 #include "indexer/ApproximateNameResolver.h"
 #include "indexer/ClangAstMacros.h"
@@ -321,7 +322,12 @@ class TuIndexer final {
   /// Read/write access roles recorded by \c saveAccess for expressions
   /// that have not been saved as references yet. An entry is removed
   /// when the expression's reference is saved.
-  absl::flat_hash_map<const clang::Expr *, int32_t> pendingAccessRoles;
+  ///
+  /// A parent expression records roles shortly before its children are
+  /// visited, so only a few entries are live at a time and they normally
+  /// fit in the inline storage. Large braced initializers and calls with
+  /// many arguments spill over to the heap.
+  llvm::SmallDenseMap<const clang::Expr *, int32_t, 16> pendingAccessRoles;
 
 public:
   TuIndexer(const clang::SourceManager &, const clang::LangOptions &,

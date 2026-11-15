@@ -1049,6 +1049,10 @@ void TuIndexer::saveAccess(const clang::Expr &target, int32_t accessRoles) {
 }
 
 int32_t TuIndexer::takeAccessRoles(const clang::Expr &expr) {
+  // Most references are saved while nothing is pending.
+  if (this->pendingAccessRoles.empty()) {
+    return 0;
+  }
   auto it = this->pendingAccessRoles.find(&expr);
   if (it == this->pendingAccessRoles.end()) {
     return 0;
