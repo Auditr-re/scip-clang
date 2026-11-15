@@ -992,7 +992,30 @@ void TuIndexer::saveCXXDependentScopeMemberExpr(
       cxxDepScopeMemberExpr.getMemberNameInfo());
 }
 
+void TuIndexer::saveAccess(const clang::Expr &target, int32_t accessRoles) {
+  ENFORCE((accessRoles
+           & ~(scip::SymbolRole::ReadAccess | scip::SymbolRole::WriteAccess))
+              == 0,
+          "only access roles can be recorded");
+  auto *expr = target.IgnoreParens();
+  if (!llvm::isa<clang::DeclRefExpr, clang::MemberExpr>(expr)) {
+    return;
+  }
+  this->pendingAccessRoles[expr] |= accessRoles;
+}
+
+int32_t TuIndexer::takeAccessRoles(const clang::Expr &expr) {
+  auto it = this->pendingAccessRoles.find(&expr);
+  if (it == this->pendingAccessRoles.end()) {
+    return 0;
+  }
+  auto roles = it->second;
+  this->pendingAccessRoles.erase(it);
+  return roles;
+}
+
 void TuIndexer::saveDeclRefExpr(const clang::DeclRefExpr &declRefExpr) {
+  auto accessRoles = this->takeAccessRoles(declRefExpr);
   // In the presence of 'using', prefer going to the 'using' instead
   // of directly dereferencing.
   auto *foundDecl = declRefExpr.getFoundDecl();
@@ -1007,11 +1030,12 @@ void TuIndexer::saveDeclRefExpr(const clang::DeclRefExpr &declRefExpr) {
   //       ^ getLocation()
   // ^^^^^^ getSourceRange()
   // ^ getExprLoc()
-  this->saveReference(optSymbol.value(), declRefExpr.getLocation(), foundDecl);
-  // ^ TODO: Add read-write access to the symbol role here
+  this->saveReference(optSymbol.value(), declRefExpr.getLocation(), foundDecl,
+                      accessRoles);
 }
 
 void TuIndexer::saveMemberExpr(const clang::MemberExpr &memberExpr) {
+  auto accessRoles = this->takeAccessRoles(memberExpr);
   auto *namedDecl =
       llvm::dyn_cast<clang::NamedDecl>(memberExpr.getMemberDecl());
   if (!namedDecl) {
@@ -1027,7 +1051,8 @@ void TuIndexer::saveMemberExpr(const clang::MemberExpr &memberExpr) {
   if (!memberExpr.getMemberNameInfo().getName().isIdentifier()) {
     return;
   }
-  this->saveReference(optSymbol.value(), memberExpr.getMemberLoc(), namedDecl);
+  this->saveReference(optSymbol.value(), memberExpr.getMemberLoc(), namedDecl,
+                      accessRoles);
 }
 
 void TuIndexer::saveUnresolvedLookupExpr(

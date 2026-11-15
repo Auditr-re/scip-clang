@@ -2,6 +2,8 @@
 #include "perfetto/perfetto.h"
 
 #include "clang/AST/DeclCXX.h"
+#include "clang/AST/Expr.h"
+#include "clang/AST/ExprCXX.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/SourceLocation.h"
@@ -53,6 +55,57 @@ public:
   }
   FOR_EACH_EXPR_TO_BE_INDEXED(VISIT_EXPR)
 #undef VISIT_EXPR
+
+  // NOTE(ref: access-roles): The methods below record whether the
+  // DeclRefExpr or MemberExpr they apply to is read, written or both.
+  // RecursiveASTVisitor visits an expression before its children, so the
+  // roles are recorded before the reference itself is saved.
+  //
+  // Uses whose access cannot be told from the expression alone, such as
+  // taking an address or binding a non-const reference, record nothing.
+
+  static constexpr int32_t readAccess = scip::SymbolRole::ReadAccess;
+  static constexpr int32_t writeAccess = scip::SymbolRole::WriteAccess;
+
+  bool VisitImplicitCastExpr(clang::ImplicitCastExpr *cast) {
+    // Clang marks every load of an lvalue's value with this cast.
+    if (cast->getCastKind() == clang::CK_LValueToRValue) {
+      this->tuIndexer.saveAccess(*cast->getSubExpr(), readAccess);
+    }
+    return true;
+  }
+
+  bool VisitBinaryOperator(clang::BinaryOperator *op) {
+    if (op->getOpcode() == clang::BO_Assign) {
+      this->tuIndexer.saveAccess(*op->getLHS(), writeAccess);
+    } else if (op->isCompoundAssignmentOp()) {
+      this->tuIndexer.saveAccess(*op->getLHS(), readAccess | writeAccess);
+    }
+    return true;
+  }
+
+  bool VisitUnaryOperator(clang::UnaryOperator *op) {
+    if (op->isIncrementDecrementOp()) {
+      this->tuIndexer.saveAccess(*op->getSubExpr(), readAccess | writeAccess);
+    }
+    return true;
+  }
+
+  /// Overloaded operators on class types. The first argument is the
+  /// object operated on, including for member operators.
+  bool VisitCXXOperatorCallExpr(clang::CXXOperatorCallExpr *call) {
+    if (call->getNumArgs() == 0) {
+      return true;
+    }
+    auto op = call->getOperator();
+    if (op == clang::OO_Equal) {
+      this->tuIndexer.saveAccess(*call->getArg(0), writeAccess);
+    } else if (call->isAssignmentOp() || op == clang::OO_PlusPlus
+               || op == clang::OO_MinusMinus) {
+      this->tuIndexer.saveAccess(*call->getArg(0), readAccess | writeAccess);
+    }
+    return true;
+  }
 
 #define VISIT_TYPE_LOC(TypeName)                                    \
   bool Visit##TypeName##TypeLoc(clang::TypeName##TypeLoc typeLoc) { \

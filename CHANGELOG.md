@@ -1,5 +1,13 @@
 # scip-clang ChangeLog
 
+## Unreleased
+
+- References to variables and fields now carry the SCIP `ReadAccess` and
+  `WriteAccess` roles. Loads are reads, `=` is a write, and compound
+  assignment, `++` and `--` (including overloaded operators) are both.
+  Uses whose access cannot be determined locally, such as taking an
+  address or binding a non-const reference, carry neither role.
+
 ## v0.4.1 (beta)
 
 - The Docker image is now based on Ubuntu 24.04 (pinned by digest) and ships

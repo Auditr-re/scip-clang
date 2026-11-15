@@ -106,7 +106,7 @@
 //                  ^ reference local 9
     p.x++;
 //  ^ reference local 10
-//    ^ reference [..] IntPair#x.
+//    ^ reference (read+write) [..] IntPair#x.
 //     ^^ reference [..] operator++(be31e3af2b2ba0e).
   
     FnLike()();

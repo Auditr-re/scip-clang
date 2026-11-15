@@ -14,7 +14,7 @@
 //        ^ reference [..] S0#x.
 //          ^ reference [..] S0#a.
       x += y;
-//    ^ reference [..] S0#x.
+//    ^ reference (read+write) [..] S0#x.
 //         ^ reference [..] S0#y.
     }
   };
@@ -32,7 +32,7 @@
 //        ^^ reference [..] S0#
 //        ^^ reference [..] S0#S0(49f6e7a06ebc5aa8).
       x = y;
-//    ^ reference [..] S0#x.
+//    ^ reference (write) [..] S0#x.
 //        ^ reference [..] S0#y.
     }
   };
@@ -54,7 +54,7 @@
 //  ^^ definition [..] S2#S2(49f6e7a06ebc5aa8).
 //        ^ reference [..] S2#b.
       a = 10; // Indirect field access
-//    ^ reference [..] S2#$anonymous_type_0#a.
+//    ^ reference (write) [..] S2#$anonymous_type_0#a.
     }
   };
   

@@ -32,3 +32,18 @@ void lambdas() {
     x += y;
   };
 }
+
+void access() {
+  int a = 0;
+  int b = a;
+  a = b;
+  a++;
+  --b;
+  (a) = 1;
+  int *p = &a;
+  *p = 2;
+  S *ps = nullptr;
+  ps->x = a;
+  ps->x += 1;
+  S::y = 3;
+}

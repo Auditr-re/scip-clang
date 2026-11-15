@@ -37,6 +37,7 @@ FOR_EACH_TYPE_TO_BE_INDEXED(FORWARD_DECLARE)
 class ASTContext;
 class Decl;
 class DeclarationNameInfo;
+class Expr;
 class LangOptions;
 class MacroDefinition;
 class MacroInfo;
@@ -311,6 +312,11 @@ class TuIndexer final {
 
   ForwardDeclMap forwardDeclarations;
 
+  /// Read/write access roles recorded by \c saveAccess for expressions
+  /// that have not been saved as references yet. An entry is removed
+  /// when the expression's reference is saved.
+  absl::flat_hash_map<const clang::Expr *, int32_t> pendingAccessRoles;
+
 public:
   TuIndexer(const clang::SourceManager &, const clang::LangOptions &,
             clang::ASTContext &, const FileIdsToBeIndexedSet &,
@@ -343,6 +349,16 @@ public:
   FOR_EACH_EXPR_TO_BE_INDEXED(SAVE_EXPR)
 #undef SAVE_EXPR
   void saveNestedNameSpecifierLoc(const clang::NestedNameSpecifierLoc &);
+
+  /// Record that the value named by \p target is read and/or written.
+  ///
+  /// \p accessRoles is a combination of \c scip::SymbolRole::ReadAccess
+  /// and \c scip::SymbolRole::WriteAccess. Parentheses around \p target
+  /// are ignored. Only a \c DeclRefExpr or \c MemberExpr target is kept;
+  /// its reference picks up the roles when it is saved, which relies on
+  /// the AST visitor visiting a parent expression before its children.
+  void saveAccess(const clang::Expr &target, int32_t accessRoles);
+
   void trySaveMemberReferenceViaLookup(const clang::QualType &,
                                        const clang::DeclarationNameInfo &);
 
@@ -360,6 +376,9 @@ public:
 private:
   std::pair<FileLocalSourceRange, clang::FileID>
   getTokenExpansionRange(clang::SourceLocation startExpansionLoc) const;
+
+  /// Removes and returns the access roles recorded for \p expr, or 0.
+  int32_t takeAccessRoles(const clang::Expr &expr);
 
   /// Helper method for recording forward declarations.
   ///

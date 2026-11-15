@@ -71,10 +71,46 @@
 //                  ^ reference local 10
 //                         ^ definition local 12
       y += z;
-//    ^ reference local 10
+//    ^ reference (read+write) local 10
 //         ^ reference local 12
       x += y;
-//    ^ reference local 9
+//    ^ reference (read+write) local 9
 //         ^ reference local 10
     };
+  }
+  
+  void access() {
+//     ^^^^^^ definition [..] access(49f6e7a06ebc5aa8).
+    int a = 0;
+//      ^ definition local 13
+    int b = a;
+//      ^ definition local 14
+//          ^ reference local 13
+    a = b;
+//  ^ reference (write) local 13
+//      ^ reference local 14
+    a++;
+//  ^ reference (read+write) local 13
+    --b;
+//    ^ reference (read+write) local 14
+    (a) = 1;
+//   ^ reference (write) local 13
+    int *p = &a;
+//       ^ definition local 15
+//            ^ reference local 13
+    *p = 2;
+//   ^ reference local 15
+    S *ps = nullptr;
+//  ^ reference [..] S#
+//     ^^ definition local 16
+    ps->x = a;
+//  ^^ reference local 16
+//      ^ reference (write) [..] S#x.
+//          ^ reference local 13
+    ps->x += 1;
+//  ^^ reference local 16
+//      ^ reference (read+write) [..] S#x.
+    S::y = 3;
+//  ^ reference [..] S#
+//     ^ reference (write) [..] S#y.
   }
