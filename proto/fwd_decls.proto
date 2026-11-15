@@ -14,5 +14,7 @@ message ForwardDecl {
   message Reference {
     repeated int32 range = 1;
     string relative_path = 2;
+    // Access roles (scip.SymbolRole ReadAccess/WriteAccess) of the reference.
+    int32 symbol_roles = 3;
   }
 }

@@ -268,10 +268,16 @@ class FileMetadataMap;
 class ForwardDeclMap final {
   struct Value {
     DocComment docComment;
+    struct Reference {
+      RootRelativePathRef path;
+      FileLocalSourceRange range;
+      /// Access roles only; see \c TuIndexer::saveAccess.
+      int32_t accessRoles;
+    };
     // It is OK for this to be a vector instead of a set as the header
     // skipping optimization would prevent occurrences for the same
     // header being emitted multiple times.
-    std::vector<std::pair<RootRelativePathRef, FileLocalSourceRange>> ranges;
+    std::vector<Reference> references;
   };
   absl::flat_hash_map<SymbolNameRef, Value> map;
 
@@ -280,7 +286,7 @@ public:
 
   void insert(SymbolNameRef symbol, DocComment &&,
               RootRelativePathRef projectFilePath,
-              FileLocalSourceRange occRange);
+              FileLocalSourceRange occRange, int32_t accessRoles = 0);
 
   void emit(bool deterministic, scip::ForwardDeclIndex &);
 };

@@ -354,10 +354,11 @@ bool RefersToForwardDecl::check(const clang::Decl &decl) {
 
 void ForwardDeclMap::insert(SymbolNameRef symbol, DocComment &&docComment,
                             RootRelativePathRef projectFilePath,
-                            FileLocalSourceRange occRange) {
+                            FileLocalSourceRange occRange,
+                            int32_t accessRoles) {
   auto &entry = this->map[symbol]; // deliberate default initialization
   entry.docComment.replaceIfEmpty(std::move(docComment));
-  entry.ranges.push_back({projectFilePath, occRange});
+  entry.references.push_back({projectFilePath, occRange, accessRoles});
 }
 
 void ForwardDeclMap::emit(bool deterministic, scip::ForwardDeclIndex &index) {
@@ -373,11 +374,12 @@ void ForwardDeclMap::emit(bool deterministic, scip::ForwardDeclIndex &index) {
                 symbol.value);
         fwdDecl.set_suffix(optSuffix->value.data(), optSuffix->value.size());
         value.docComment.addTo(*fwdDecl.mutable_documentation());
-        for (auto [path, range] : value.ranges) {
+        for (auto &reference : value.references) {
           scip::ForwardDecl::Reference ref{};
-          range.addTo(ref);
-          auto p = path.asStringView();
+          reference.range.addTo(ref);
+          auto p = reference.path.asStringView();
           ref.set_relative_path(p.data(), p.size());
+          ref.set_symbol_roles(reference.accessRoles);
           *fwdDecl.add_references() = std::move(ref);
         }
         *index.add_forward_decls() = std::move(fwdDecl);
@@ -1193,7 +1195,7 @@ void TuIndexer::saveReference(SymbolNameRef symbol, clang::SourceLocation loc,
   if (maybeFwdDecl && RefersToForwardDecl::check(*maybeFwdDecl)) {
     auto [range, _] = this->getTokenExpansionRange(expansionLoc);
     this->forwardDeclarations.insert(symbol, this->getDocComment(*maybeFwdDecl),
-                                     optStableFileId->path, range);
+                                     optStableFileId->path, range, extraRoles);
     return;
   }
   (void)this->saveOccurrence(symbol, expansionLoc, extraRoles);
