@@ -44,6 +44,7 @@ jobs:
 
       # End-to-end check that the built indexer emits access roles.
       - name: "🔎 Index the access-roles sample"
+        if: ${{ !cancelled() }}
         env:
           ASAN_OPTIONS: "detect_leaks=0"
         run: |
@@ -59,6 +60,26 @@ jobs:
         with:
           name: access-roles-e2e
           path: e2e/out/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Regenerate the snapshots so that a change in expected output can be
+      # reviewed and applied with 'git apply snapshots.patch'. The local
+      # strategy lets the update write through runfiles into the checkout.
+      - name: "📸 Regenerate snapshots"
+        if: failure()
+        run: |
+          bazel test //test:update --config=dev --spawn_strategy=local \
+            --nocache_test_results || true
+          git diff > snapshots.patch
+          git diff --stat
+
+      - name: "📤 Upload snapshot patch"
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: snapshots-patch
+          path: snapshots.patch
           retention-days: 7
           if-no-files-found: ignore
 

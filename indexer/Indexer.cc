@@ -519,9 +519,10 @@ void TuIndexer::saveFieldDecl(const clang::FieldDecl &fieldDecl) {
 }
 
 void TuIndexer::saveFieldReference(const clang::FieldDecl &fieldDecl,
-                                   clang::SourceLocation loc) {
+                                   clang::SourceLocation loc,
+                                   int32_t accessRoles) {
   if (auto optSymbol = this->symbolFormatter.getFieldSymbol(fieldDecl)) {
-    this->saveReference(*optSymbol, loc);
+    this->saveReference(*optSymbol, loc, nullptr, accessRoles);
   }
 }
 
@@ -994,16 +995,57 @@ void TuIndexer::saveCXXDependentScopeMemberExpr(
       cxxDepScopeMemberExpr.getMemberNameInfo());
 }
 
+/// Strip parentheses and implicit casts that refer to the same object.
+static const clang::Expr *ignoreSameObjectCasts(const clang::Expr *expr) {
+  while (true) {
+    expr = expr->IgnoreParens();
+    auto *cast = llvm::dyn_cast<clang::ImplicitCastExpr>(expr);
+    if (!cast) {
+      return expr;
+    }
+    switch (cast->getCastKind()) {
+    case clang::CK_NoOp:
+    case clang::CK_DerivedToBase:
+    case clang::CK_UncheckedDerivedToBase:
+      expr = cast->getSubExpr();
+      continue;
+    default:
+      return expr;
+    }
+  }
+}
+
 void TuIndexer::saveAccess(const clang::Expr &target, int32_t accessRoles) {
   ENFORCE((accessRoles
            & ~(scip::SymbolRole::ReadAccess | scip::SymbolRole::WriteAccess))
               == 0,
           "only access roles can be recorded");
-  auto *expr = target.IgnoreParens();
-  if (!llvm::isa<clang::DeclRefExpr, clang::MemberExpr>(expr)) {
+  if (accessRoles == 0) {
     return;
   }
-  this->pendingAccessRoles[expr] |= accessRoles;
+  auto *expr = ignoreSameObjectCasts(&target);
+  if (auto *memberExpr = llvm::dyn_cast<clang::MemberExpr>(expr)) {
+    this->pendingAccessRoles[memberExpr] |= accessRoles;
+    auto *field = llvm::dyn_cast<clang::FieldDecl>(memberExpr->getMemberDecl());
+    if (!memberExpr->isArrow() && field && !field->getType()->isReferenceType()) {
+      this->saveAccess(*memberExpr->getBase(), accessRoles);
+    }
+    return;
+  }
+  if (auto *subscript = llvm::dyn_cast<clang::ArraySubscriptExpr>(expr)) {
+    // Only a real array is part of the access; a pointer is merely read,
+    // which its own lvalue-to-rvalue cast already records.
+    auto *base = subscript->getBase()->IgnoreParens();
+    if (auto *decay = llvm::dyn_cast<clang::ImplicitCastExpr>(base)) {
+      if (decay->getCastKind() == clang::CK_ArrayToPointerDecay) {
+        this->saveAccess(*decay->getSubExpr(), accessRoles);
+      }
+    }
+    return;
+  }
+  if (llvm::isa<clang::DeclRefExpr>(expr)) {
+    this->pendingAccessRoles[expr] |= accessRoles;
+  }
 }
 
 int32_t TuIndexer::takeAccessRoles(const clang::Expr &expr) {

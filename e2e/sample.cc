@@ -27,3 +27,27 @@ int run(Point p, Point q) {
   *ptr = 2;       // expect: ptr read
   return global;  // expect: global read
 }
+
+void takesConst(const int &v);
+void takesMut(int &v);
+void takesPoint(Point v);
+
+struct Holder {
+  int v;
+  Holder(int x) : v(x) {} // expect: v write, x read
+  int get() const { return v; }
+};
+
+int more(Point p, Holder h) {
+  int i = 0;
+  int arr[3] = {i, i, i}; // expect: i read (braced initializer)
+  arr[i] = 1;             // expect: arr write, i read
+  p.x = 2;                // expect: p write, x write
+  takesConst(i);          // expect: i read (const reference)
+  takesMut(i);            // expect: i unknown (non-const reference)
+  takesPoint(p);          // expect: p read (copy constructor)
+  Point q = p;            // expect: p read
+  int n = h.get();        // expect: h read (const method)
+  Point r = {i, arr[0]};  // expect: i read, arr read
+  return n + q.x + r.y;
+}

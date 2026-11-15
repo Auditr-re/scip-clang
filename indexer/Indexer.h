@@ -343,7 +343,8 @@ public:
   FOR_EACH_DECL_TO_BE_INDEXED(SAVE_DECL)
 #undef SAVE_DECL
 
-  void saveFieldReference(const clang::FieldDecl &, clang::SourceLocation);
+  void saveFieldReference(const clang::FieldDecl &, clang::SourceLocation,
+                          int32_t accessRoles = 0);
   void saveTagDecl(const clang::TagDecl &);
   void saveTagTypeLoc(const clang::TagTypeLoc &);
 
@@ -359,10 +360,16 @@ public:
   /// Record that the value named by \p target is read and/or written.
   ///
   /// \p accessRoles is a combination of \c scip::SymbolRole::ReadAccess
-  /// and \c scip::SymbolRole::WriteAccess. Parentheses around \p target
-  /// are ignored. Only a \c DeclRefExpr or \c MemberExpr target is kept;
-  /// its reference picks up the roles when it is saved, which relies on
-  /// the AST visitor visiting a parent expression before its children.
+  /// and \c scip::SymbolRole::WriteAccess. Parentheses and casts that
+  /// keep the same object (no-op and derived-to-base) are looked through.
+  /// Only a \c DeclRefExpr or \c MemberExpr target is kept; its reference
+  /// picks up the roles when it is saved, which relies on the AST visitor
+  /// visiting a parent expression before its children.
+  ///
+  /// Accessing a member through '.' or an element of an array also
+  /// accesses the enclosing object, so the roles are passed on to the base
+  /// expression too (but not through '->' or a pointer, nor for static
+  /// members and reference members, which live outside the object).
   void saveAccess(const clang::Expr &target, int32_t accessRoles);
 
   void trySaveMemberReferenceViaLookup(const clang::QualType &,
