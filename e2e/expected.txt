@@ -1,5 +1,3 @@
-[1/1] Indexed /home/runner/work/scip-clang/scip-clang/e2e/sample.cc
-[1/1] Merged partial index for /home/runner/work/scip-clang/scip-clang/e2e/sample.cc
 Finished indexing 1 translation units in 0.2s (indexing: 0.2s, merging: 0.0s, num errored TUs: 0).
 == sample.cc
    1:1   unknown    definition             cxx . . $ `<file>/sample.cc`/
