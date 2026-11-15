@@ -246,6 +246,7 @@ void ForwardDeclOccurrence::addTo(scip::Occurrence &occ) {
   for (size_t i = 0; i < 4 && this->range[i] != -1; ++i) {
     occ.add_range(this->range[i]);
   }
+  occ.set_symbol_roles(this->symbolRoles);
 }
 
 IndexBuilder::IndexBuilder(SymbolNameInterner interner)

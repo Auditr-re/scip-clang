@@ -37,11 +37,11 @@
 //                                    ^ definition local 0
 //                                                ^ definition local 1
 //                                                                ^ definition local 2
-//                                                                         ^ reference [..] dim3#x.
+//                                                                         ^ reference (write) [..] dim3#x.
 //                                                                           ^ reference local 0
-//                                                                               ^ reference [..] dim3#y.
+//                                                                               ^ reference (write) [..] dim3#y.
 //                                                                                 ^ reference local 1
-//                                                                                     ^ reference [..] dim3#z.
+//                                                                                     ^ reference (write) [..] dim3#z.
 //                                                                                       ^ reference local 2
   };
   

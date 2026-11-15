@@ -354,10 +354,11 @@ bool RefersToForwardDecl::check(const clang::Decl &decl) {
 
 void ForwardDeclMap::insert(SymbolNameRef symbol, DocComment &&docComment,
                             RootRelativePathRef projectFilePath,
-                            FileLocalSourceRange occRange) {
+                            FileLocalSourceRange occRange,
+                            int32_t accessRoles) {
   auto &entry = this->map[symbol]; // deliberate default initialization
   entry.docComment.replaceIfEmpty(std::move(docComment));
-  entry.ranges.push_back({projectFilePath, occRange});
+  entry.references.push_back({projectFilePath, occRange, accessRoles});
 }
 
 void ForwardDeclMap::emit(bool deterministic, scip::ForwardDeclIndex &index) {
@@ -373,11 +374,12 @@ void ForwardDeclMap::emit(bool deterministic, scip::ForwardDeclIndex &index) {
                 symbol.value);
         fwdDecl.set_suffix(optSuffix->value.data(), optSuffix->value.size());
         value.docComment.addTo(*fwdDecl.mutable_documentation());
-        for (auto [path, range] : value.ranges) {
+        for (auto &reference : value.references) {
           scip::ForwardDecl::Reference ref{};
-          range.addTo(ref);
-          auto p = path.asStringView();
+          reference.range.addTo(ref);
+          auto p = reference.path.asStringView();
           ref.set_relative_path(p.data(), p.size());
+          ref.set_symbol_roles(reference.accessRoles);
           *fwdDecl.add_references() = std::move(ref);
         }
         *index.add_forward_decls() = std::move(fwdDecl);
@@ -517,9 +519,10 @@ void TuIndexer::saveFieldDecl(const clang::FieldDecl &fieldDecl) {
 }
 
 void TuIndexer::saveFieldReference(const clang::FieldDecl &fieldDecl,
-                                   clang::SourceLocation loc) {
+                                   clang::SourceLocation loc,
+                                   int32_t accessRoles) {
   if (auto optSymbol = this->symbolFormatter.getFieldSymbol(fieldDecl)) {
-    this->saveReference(*optSymbol, loc);
+    this->saveReference(*optSymbol, loc, nullptr, accessRoles);
   }
 }
 
@@ -992,7 +995,75 @@ void TuIndexer::saveCXXDependentScopeMemberExpr(
       cxxDepScopeMemberExpr.getMemberNameInfo());
 }
 
+/// Strip parentheses and implicit casts that refer to the same object.
+static const clang::Expr *ignoreSameObjectCasts(const clang::Expr *expr) {
+  while (true) {
+    expr = expr->IgnoreParens();
+    auto *cast = llvm::dyn_cast<clang::ImplicitCastExpr>(expr);
+    if (!cast) {
+      return expr;
+    }
+    switch (cast->getCastKind()) {
+    case clang::CK_NoOp:
+    case clang::CK_DerivedToBase:
+    case clang::CK_UncheckedDerivedToBase:
+      expr = cast->getSubExpr();
+      continue;
+    default:
+      return expr;
+    }
+  }
+}
+
+void TuIndexer::saveAccess(const clang::Expr &target, int32_t accessRoles) {
+  ENFORCE((accessRoles
+           & ~(scip::SymbolRole::ReadAccess | scip::SymbolRole::WriteAccess))
+              == 0,
+          "only access roles can be recorded");
+  if (accessRoles == 0) {
+    return;
+  }
+  auto *expr = ignoreSameObjectCasts(&target);
+  if (auto *memberExpr = llvm::dyn_cast<clang::MemberExpr>(expr)) {
+    this->pendingAccessRoles[memberExpr] |= accessRoles;
+    auto *field = llvm::dyn_cast<clang::FieldDecl>(memberExpr->getMemberDecl());
+    if (!memberExpr->isArrow() && field && !field->getType()->isReferenceType()) {
+      this->saveAccess(*memberExpr->getBase(), accessRoles);
+    }
+    return;
+  }
+  if (auto *subscript = llvm::dyn_cast<clang::ArraySubscriptExpr>(expr)) {
+    // Only a real array is part of the access; a pointer is merely read,
+    // which its own lvalue-to-rvalue cast already records.
+    auto *base = subscript->getBase()->IgnoreParens();
+    if (auto *decay = llvm::dyn_cast<clang::ImplicitCastExpr>(base)) {
+      if (decay->getCastKind() == clang::CK_ArrayToPointerDecay) {
+        this->saveAccess(*decay->getSubExpr(), accessRoles);
+      }
+    }
+    return;
+  }
+  if (llvm::isa<clang::DeclRefExpr>(expr)) {
+    this->pendingAccessRoles[expr] |= accessRoles;
+  }
+}
+
+int32_t TuIndexer::takeAccessRoles(const clang::Expr &expr) {
+  // Most references are saved while nothing is pending.
+  if (this->pendingAccessRoles.empty()) {
+    return 0;
+  }
+  auto it = this->pendingAccessRoles.find(&expr);
+  if (it == this->pendingAccessRoles.end()) {
+    return 0;
+  }
+  auto roles = it->second;
+  this->pendingAccessRoles.erase(it);
+  return roles;
+}
+
 void TuIndexer::saveDeclRefExpr(const clang::DeclRefExpr &declRefExpr) {
+  auto accessRoles = this->takeAccessRoles(declRefExpr);
   // In the presence of 'using', prefer going to the 'using' instead
   // of directly dereferencing.
   auto *foundDecl = declRefExpr.getFoundDecl();
@@ -1007,11 +1078,12 @@ void TuIndexer::saveDeclRefExpr(const clang::DeclRefExpr &declRefExpr) {
   //       ^ getLocation()
   // ^^^^^^ getSourceRange()
   // ^ getExprLoc()
-  this->saveReference(optSymbol.value(), declRefExpr.getLocation(), foundDecl);
-  // ^ TODO: Add read-write access to the symbol role here
+  this->saveReference(optSymbol.value(), declRefExpr.getLocation(), foundDecl,
+                      accessRoles);
 }
 
 void TuIndexer::saveMemberExpr(const clang::MemberExpr &memberExpr) {
+  auto accessRoles = this->takeAccessRoles(memberExpr);
   auto *namedDecl =
       llvm::dyn_cast<clang::NamedDecl>(memberExpr.getMemberDecl());
   if (!namedDecl) {
@@ -1027,7 +1099,8 @@ void TuIndexer::saveMemberExpr(const clang::MemberExpr &memberExpr) {
   if (!memberExpr.getMemberNameInfo().getName().isIdentifier()) {
     return;
   }
-  this->saveReference(optSymbol.value(), memberExpr.getMemberLoc(), namedDecl);
+  this->saveReference(optSymbol.value(), memberExpr.getMemberLoc(), namedDecl,
+                      accessRoles);
 }
 
 void TuIndexer::saveUnresolvedLookupExpr(
@@ -1168,7 +1241,7 @@ void TuIndexer::saveReference(SymbolNameRef symbol, clang::SourceLocation loc,
   if (maybeFwdDecl && RefersToForwardDecl::check(*maybeFwdDecl)) {
     auto [range, _] = this->getTokenExpansionRange(expansionLoc);
     this->forwardDeclarations.insert(symbol, this->getDocComment(*maybeFwdDecl),
-                                     optStableFileId->path, range);
+                                     optStableFileId->path, range, extraRoles);
     return;
   }
   (void)this->saveOccurrence(symbol, expansionLoc, extraRoles);

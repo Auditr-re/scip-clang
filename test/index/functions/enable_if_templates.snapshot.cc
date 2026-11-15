@@ -94,7 +94,7 @@
 //  ^^^ definition [..] Ptr#`Ptr<T>`(ebd0a1552f8ce24f).
 //      ^ reference local 9
 //         ^^^ definition local 10
-//                ^ reference [..] Ptr#p.
+//                ^ reference (write) [..] Ptr#p.
 //                  ^^^ reference local 10
     T *operator->() const { return p; }
 //  ^ reference local 9
@@ -119,7 +119,7 @@
   public:
     ThreadPool() : mThread(new ThreadLoop()) {}
 //  ^^^^^^^^^^ definition [..] ThreadPool#ThreadPool(49f6e7a06ebc5aa8).
-//                 ^^^^^^^ reference [..] ThreadPool#mThread.
+//                 ^^^^^^^ reference (write) [..] ThreadPool#mThread.
 //                 ^^^^^^^ reference [..] Ptr#Ptr(ebd0a1552f8ce24f).
 //                             ^^^^^^^^^^ reference [..] ThreadLoop#
   

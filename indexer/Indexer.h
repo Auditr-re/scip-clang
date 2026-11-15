@@ -14,6 +14,7 @@
 
 #include "clang/AST/RawCommentList.h"
 #include "clang/Basic/SourceLocation.h"
+#include "llvm/ADT/DenseMap.h"
 
 #include "indexer/ApproximateNameResolver.h"
 #include "indexer/ClangAstMacros.h"
@@ -37,6 +38,7 @@ FOR_EACH_TYPE_TO_BE_INDEXED(FORWARD_DECLARE)
 class ASTContext;
 class Decl;
 class DeclarationNameInfo;
+class Expr;
 class LangOptions;
 class MacroDefinition;
 class MacroInfo;
@@ -267,10 +269,16 @@ class FileMetadataMap;
 class ForwardDeclMap final {
   struct Value {
     DocComment docComment;
+    struct Reference {
+      RootRelativePathRef path;
+      FileLocalSourceRange range;
+      /// Access roles only; see \c TuIndexer::saveAccess.
+      int32_t accessRoles;
+    };
     // It is OK for this to be a vector instead of a set as the header
     // skipping optimization would prevent occurrences for the same
     // header being emitted multiple times.
-    std::vector<std::pair<RootRelativePathRef, FileLocalSourceRange>> ranges;
+    std::vector<Reference> references;
   };
   absl::flat_hash_map<SymbolNameRef, Value> map;
 
@@ -279,7 +287,7 @@ public:
 
   void insert(SymbolNameRef symbol, DocComment &&,
               RootRelativePathRef projectFilePath,
-              FileLocalSourceRange occRange);
+              FileLocalSourceRange occRange, int32_t accessRoles = 0);
 
   void emit(bool deterministic, scip::ForwardDeclIndex &);
 };
@@ -311,6 +319,16 @@ class TuIndexer final {
 
   ForwardDeclMap forwardDeclarations;
 
+  /// Read/write access roles recorded by \c saveAccess for expressions
+  /// that have not been saved as references yet. An entry is removed
+  /// when the expression's reference is saved.
+  ///
+  /// A parent expression records roles shortly before its children are
+  /// visited, so only a few entries are live at a time and they normally
+  /// fit in the inline storage. Large braced initializers and calls with
+  /// many arguments spill over to the heap.
+  llvm::SmallDenseMap<const clang::Expr *, int32_t, 16> pendingAccessRoles;
+
 public:
   TuIndexer(const clang::SourceManager &, const clang::LangOptions &,
             clang::ASTContext &, const FileIdsToBeIndexedSet &,
@@ -331,7 +349,8 @@ public:
   FOR_EACH_DECL_TO_BE_INDEXED(SAVE_DECL)
 #undef SAVE_DECL
 
-  void saveFieldReference(const clang::FieldDecl &, clang::SourceLocation);
+  void saveFieldReference(const clang::FieldDecl &, clang::SourceLocation,
+                          int32_t accessRoles = 0);
   void saveTagDecl(const clang::TagDecl &);
   void saveTagTypeLoc(const clang::TagTypeLoc &);
 
@@ -343,6 +362,22 @@ public:
   FOR_EACH_EXPR_TO_BE_INDEXED(SAVE_EXPR)
 #undef SAVE_EXPR
   void saveNestedNameSpecifierLoc(const clang::NestedNameSpecifierLoc &);
+
+  /// Record that the value named by \p target is read and/or written.
+  ///
+  /// \p accessRoles is a combination of \c scip::SymbolRole::ReadAccess
+  /// and \c scip::SymbolRole::WriteAccess. Parentheses and casts that
+  /// keep the same object (no-op and derived-to-base) are looked through.
+  /// Only a \c DeclRefExpr or \c MemberExpr target is kept; its reference
+  /// picks up the roles when it is saved, which relies on the AST visitor
+  /// visiting a parent expression before its children.
+  ///
+  /// Accessing a member through '.' or an element of an array also
+  /// accesses the enclosing object, so the roles are passed on to the base
+  /// expression too (but not through '->' or a pointer, nor for static
+  /// members and reference members, which live outside the object).
+  void saveAccess(const clang::Expr &target, int32_t accessRoles);
+
   void trySaveMemberReferenceViaLookup(const clang::QualType &,
                                        const clang::DeclarationNameInfo &);
 
@@ -360,6 +395,9 @@ public:
 private:
   std::pair<FileLocalSourceRange, clang::FileID>
   getTokenExpansionRange(clang::SourceLocation startExpansionLoc) const;
+
+  /// Removes and returns the access roles recorded for \p expr, or 0.
+  int32_t takeAccessRoles(const clang::Expr &expr);
 
   /// Helper method for recording forward declarations.
   ///

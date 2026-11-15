@@ -2,6 +2,8 @@
 #include "perfetto/perfetto.h"
 
 #include "clang/AST/DeclCXX.h"
+#include "clang/AST/Expr.h"
+#include "clang/AST/ExprCXX.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/SourceLocation.h"
@@ -54,6 +56,148 @@ public:
   FOR_EACH_EXPR_TO_BE_INDEXED(VISIT_EXPR)
 #undef VISIT_EXPR
 
+  // NOTE(ref: access-roles): The methods below record whether the
+  // DeclRefExpr or MemberExpr they apply to is read, written or both.
+  // RecursiveASTVisitor visits an expression before its children, so the
+  // roles are recorded before the reference itself is saved.
+  //
+  // Uses whose access cannot be told from the expression alone, such as
+  // taking an address, binding a non-const reference or calling a
+  // non-const method, record nothing.
+
+  static constexpr int32_t readAccess = scip::SymbolRole::ReadAccess;
+  static constexpr int32_t writeAccess = scip::SymbolRole::WriteAccess;
+
+  bool VisitImplicitCastExpr(clang::ImplicitCastExpr *cast) {
+    // Clang marks every load of an lvalue's value with this cast.
+    if (cast->getCastKind() == clang::CK_LValueToRValue) {
+      this->tuIndexer.saveAccess(*cast->getSubExpr(), readAccess);
+    }
+    return true;
+  }
+
+  bool VisitBinaryOperator(clang::BinaryOperator *op) {
+    if (op->getOpcode() == clang::BO_Assign) {
+      this->tuIndexer.saveAccess(*op->getLHS(), writeAccess);
+    } else if (op->isCompoundAssignmentOp()) {
+      this->tuIndexer.saveAccess(*op->getLHS(), readAccess | writeAccess);
+    }
+    return true;
+  }
+
+  bool VisitUnaryOperator(clang::UnaryOperator *op) {
+    if (op->isIncrementDecrementOp()) {
+      this->tuIndexer.saveAccess(*op->getSubExpr(), readAccess | writeAccess);
+    }
+    return true;
+  }
+
+  /// Overloaded operators on class types. The first argument is the
+  /// object operated on, including for member operators.
+  bool VisitCXXOperatorCallExpr(clang::CXXOperatorCallExpr *call) {
+    if (call->getNumArgs() == 0) {
+      return true;
+    }
+    auto op = call->getOperator();
+    if (op == clang::OO_Equal) {
+      this->tuIndexer.saveAccess(*call->getArg(0), writeAccess);
+    } else if (call->isAssignmentOp() || op == clang::OO_PlusPlus
+               || op == clang::OO_MinusMinus) {
+      this->tuIndexer.saveAccess(*call->getArg(0), readAccess | writeAccess);
+    }
+    return true;
+  }
+
+  static bool isConstLValueReference(clang::QualType type) {
+    return type->isLValueReferenceType()
+           && type.getNonReferenceType().isConstQualified();
+  }
+
+  /// An argument bound to a const lvalue reference parameter can only be
+  /// read through it.
+  void saveConstRefArgumentReads(const clang::FunctionDecl &callee,
+                                 llvm::ArrayRef<const clang::Expr *> args) {
+    auto params = callee.parameters();
+    for (size_t i = 0; i < args.size() && i < params.size(); ++i) {
+      if (isConstLValueReference(params[i]->getType())) {
+        this->tuIndexer.saveAccess(*args[i], readAccess);
+      }
+    }
+  }
+
+  /// Ordinary calls, member calls and overloaded operators.
+  bool VisitCallExpr(clang::CallExpr *call) {
+    auto *callee = call->getDirectCallee();
+    if (!callee) {
+      return true;
+    }
+    llvm::ArrayRef<const clang::Expr *> args(call->getArgs(),
+                                             call->getNumArgs());
+    auto *method = llvm::dyn_cast<clang::CXXMethodDecl>(callee);
+    bool hasImplicitObject =
+        method && method->isImplicitObjectMemberFunction();
+    if (auto *memberCall = llvm::dyn_cast<clang::CXXMemberCallExpr>(call)) {
+      auto *memberCallee =
+          llvm::dyn_cast<clang::MemberExpr>(memberCall->getCallee()->IgnoreParens());
+      if (hasImplicitObject && method->isConst() && memberCallee
+          && !memberCallee->isArrow()) {
+        this->tuIndexer.saveAccess(*memberCallee->getBase(), readAccess);
+      }
+    } else if (llvm::isa<clang::CXXOperatorCallExpr>(call)
+               && hasImplicitObject && !args.empty()) {
+      // For a member operator, the first argument is the object itself.
+      if (method->isConst()) {
+        this->tuIndexer.saveAccess(*args[0], readAccess);
+      }
+      args = args.drop_front();
+    }
+    this->saveConstRefArgumentReads(*callee, args);
+    return true;
+  }
+
+  /// Covers copies of class objects, such as 'T b = a;' and passing a class
+  /// object by value, which call a copy constructor taking 'const T &'.
+  /// (VisitCXXConstructExpr is already defined by VISIT_EXPR above.)
+  bool VisitExpr(clang::Expr *expr) {
+    auto *construct = llvm::dyn_cast<clang::CXXConstructExpr>(expr);
+    if (!construct) {
+      return true;
+    }
+    if (auto *ctor = construct->getConstructor()) {
+      llvm::ArrayRef<const clang::Expr *> args(construct->getArgs(),
+                                               construct->getNumArgs());
+      this->saveConstRefArgumentReads(*ctor, args);
+    }
+    return true;
+  }
+
+  /// The visitor walks the syntactic form of a braced initializer, which
+  /// can lack the implicit casts that mark its elements as loaded, so read
+  /// them off the semantic form. Both forms share the element expressions.
+  bool VisitInitListExpr(clang::InitListExpr *list) {
+    auto *semantic = list->getSemanticForm();
+    if (semantic && semantic != list) {
+      this->saveInitListReads(*semantic);
+    }
+    return true;
+  }
+
+  void saveInitListReads(const clang::InitListExpr &list) {
+    for (auto *init : list.inits()) {
+      if (!init) {
+        continue;
+      }
+      init = init->IgnoreParens();
+      if (auto *nested = llvm::dyn_cast<clang::InitListExpr>(init)) {
+        this->saveInitListReads(*nested);
+      } else if (auto *cast = llvm::dyn_cast<clang::ImplicitCastExpr>(init)) {
+        if (cast->getCastKind() == clang::CK_LValueToRValue) {
+          this->tuIndexer.saveAccess(*cast->getSubExpr(), readAccess);
+        }
+      }
+    }
+  }
+
 #define VISIT_TYPE_LOC(TypeName)                                    \
   bool Visit##TypeName##TypeLoc(clang::TypeName##TypeLoc typeLoc) { \
     this->tuIndexer.save##TypeName##TypeLoc(typeLoc);               \
@@ -89,8 +233,10 @@ public:
       TRY_TO(TraverseTypeLoc(TInfo->getTypeLoc()));
     }
     if (clang::FieldDecl *fieldDecl = cxxCtorInitializer->getAnyMember()) {
+      // A written member initializer, as in 'S() : x(1) {}', writes x.
       this->tuIndexer.saveFieldReference(
-          *fieldDecl, cxxCtorInitializer->getSourceLocation());
+          *fieldDecl, cxxCtorInitializer->getSourceLocation(),
+          cxxCtorInitializer->isWritten() ? writeAccess : 0);
     }
     if (cxxCtorInitializer->isWritten()
         || this->getDerived().shouldVisitImplicitCode()) {

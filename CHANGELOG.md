@@ -1,5 +1,18 @@
 # scip-clang ChangeLog
 
+## Unreleased
+
+- References to variables and fields now carry the SCIP `ReadAccess` and
+  `WriteAccess` roles. Loads are reads, `=` is a write, and compound
+  assignment, `++` and `--` (including overloaded operators) are both.
+  Arguments bound to `const T &` (including copies of class objects),
+  calls of const methods and elements of braced initializers are reads,
+  and written member initializers are writes. Accessing a member with `.`
+  or an element of an array also accesses the enclosing object.
+  Uses whose access cannot be determined locally, such as taking an
+  address, binding a non-const reference or calling a non-const method,
+  carry neither role.
+
 ## v0.4.1 (beta)
 
 - The Docker image is now based on Ubuntu 24.04 (pinned by digest) and ships

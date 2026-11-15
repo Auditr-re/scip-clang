@@ -32,3 +32,31 @@ void lambdas() {
     x += y;
   };
 }
+
+void access() {
+  int a = 0;
+  int b = a;
+  a = b;
+  a++;
+  --b;
+  (a) = 1;
+  int *p = &a;
+  *p = 2;
+  S *ps = nullptr;
+  ps->x = a;
+  ps->x += 1;
+  S::y = 3;
+}
+
+struct T {
+  int x;
+  int xs[2];
+  T(int x) : x(x), xs{x, x} {}
+};
+
+void enclosing_access(T t) {
+  int arr[2] = {0, 0};
+  arr[1] = 1;
+  t.x = 2;
+  t.xs[0] += 3;
+}
