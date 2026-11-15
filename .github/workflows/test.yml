@@ -42,6 +42,25 @@ jobs:
           echo "startup --host_jvm_args=-Xmx6G" > ci.bazelrc
           bazel test //test --config=dev --test_output=errors
 
+      # End-to-end check that the built indexer emits access roles.
+      - name: "🔎 Index the access-roles sample"
+        env:
+          ASAN_OPTIONS: "detect_leaks=0"
+        run: |
+          bazel build //indexer:scip-clang --config=dev
+          e2e/run.sh | tee e2e/out/roles.txt
+          grep -q ' write ' e2e/out/roles.txt
+          grep -q ' read+write ' e2e/out/roles.txt
+
+      - name: "📦 Upload the sample index"
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: access-roles-e2e
+          path: e2e/out/
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: "🪵 Upload test logs"
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
