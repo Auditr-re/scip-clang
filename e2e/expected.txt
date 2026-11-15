@@ -1,4 +1,3 @@
-Finished indexing 1 translation units in 0.2s (indexing: 0.2s, merging: 0.0s, num errored TUs: 0).
 == sample.cc
    1:1   unknown    definition             cxx . . $ `<file>/sample.cc`/
    3:8   unknown    definition             cxx . . $ Point#
