@@ -105,7 +105,7 @@
 //                ^ reference [..] `operator,`(56a2b3932346e301).
 //                  ^ reference local 9
     p.x++;
-//  ^ reference local 10
+//  ^ reference (read+write) local 10
 //    ^ reference (read+write) [..] IntPair#x.
 //     ^^ reference [..] operator++(be31e3af2b2ba0e).
   

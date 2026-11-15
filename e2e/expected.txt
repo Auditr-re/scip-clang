@@ -1,0 +1,97 @@
+[1/1] Indexed /home/runner/work/scip-clang/scip-clang/e2e/sample.cc
+[1/1] Merged partial index for /home/runner/work/scip-clang/scip-clang/e2e/sample.cc
+Finished indexing 1 translation units in 0.2s (indexing: 0.2s, merging: 0.0s, num errored TUs: 0).
+== sample.cc
+   1:1   unknown    definition             cxx . . $ `<file>/sample.cc`/
+   3:8   unknown    definition             cxx . . $ Point#
+   4:7   unknown    definition             cxx . . $ Point#x.
+   5:7   unknown    definition             cxx . . $ Point#y.
+   6:14  unknown    definition             cxx . . $ Point#count.
+   7:3   unknown    -                      cxx . . $ Point#
+   7:10  unknown    definition             cxx . . $ Point#`operator+=`(68c5bce4b4af3f83).
+   7:27  unknown    -                      cxx . . $ Point#
+   7:34  unknown    definition             local 0
+  11:5   unknown    definition             cxx . . $ global.
+  13:5   unknown    definition             cxx . . $ run(9d4c626a6c2982d).
+  13:9   unknown    -                      cxx . . $ Point#
+  13:15  unknown    definition             local 1
+  13:18  unknown    -                      cxx . . $ Point#
+  13:24  unknown    definition             local 2
+  14:7   unknown    definition             local 3
+  15:7   unknown    definition             local 4
+  15:11  read       read                   local 3
+  16:3   write      write                  local 3
+  16:7   read       read                   local 4
+  17:3   read+write write,read             local 3
+  18:5   read+write write,read             local 4
+  19:3   read+write write,read             local 3
+  19:8   read       read                   local 4
+  20:4   write      write                  local 3
+  21:3   write      write                  local 1
+  21:5   write      write                  cxx . . $ Point#x.
+  21:9   read       read                   local 2
+  21:11  read       read                   cxx . . $ Point#y.
+  22:3   read+write write,read             local 1
+  22:5   read+write write,read             cxx . . $ Point#y.
+  23:3   unknown    -                      cxx . . $ Point#
+  23:10  write      write                  cxx . . $ Point#count.
+  24:3   write      write                  cxx . . $ global.
+  24:12  read       read                   local 3
+  24:16  read       read                   local 4
+  25:3   read+write write,read             local 1
+  25:5   unknown    -                      cxx . . $ Point#`operator+=`(68c5bce4b4af3f83).
+  25:8   read       read                   local 2
+  26:8   unknown    definition             local 5
+  26:15  unknown    -                      local 3
+  27:4   read       read                   local 5
+  28:10  read       read                   cxx . . $ global.
+  31:6   unknown    -                      cxx . . $ takesConst(794bbbca577513a2).
+  31:28  unknown    definition             local 6
+  32:6   unknown    -                      cxx . . $ takesMut(2afed6f74e8a6d90).
+  32:20  unknown    definition             local 7
+  33:6   unknown    -                      cxx . . $ takesPoint(83fc12429a3823ae).
+  33:17  unknown    -                      cxx . . $ Point#
+  33:23  unknown    definition             local 8
+  35:8   unknown    definition             cxx . . $ Holder#
+  36:7   unknown    definition             cxx . . $ Holder#v.
+  37:3   unknown    definition             cxx . . $ Holder#Holder(d4f767463ce0a6b3).
+  37:14  unknown    definition             local 9
+  37:19  write      write                  cxx . . $ Holder#v.
+  37:21  read       read                   local 9
+  38:7   unknown    definition             cxx . . $ Holder#get(455f465bc33b4cdf).
+  38:28  read       read                   cxx . . $ Holder#v.
+  41:5   unknown    definition             cxx . . $ more(4386d55f20037e42).
+  41:10  unknown    -                      cxx . . $ Point#
+  41:16  unknown    definition             local 10
+  41:19  unknown    -                      cxx . . $ Holder#
+  41:26  unknown    definition             local 11
+  42:7   unknown    definition             local 12
+  43:7   unknown    definition             local 13
+  43:17  read       read                   local 12
+  43:20  read       read                   local 12
+  43:23  read       read                   local 12
+  44:3   write      write                  local 13
+  44:7   read       read                   local 12
+  45:3   write      write                  local 10
+  45:5   write      write                  cxx . . $ Point#x.
+  46:3   unknown    -                      cxx . . $ takesConst(794bbbca577513a2).
+  46:14  read       read                   local 12
+  47:3   unknown    -                      cxx . . $ takesMut(2afed6f74e8a6d90).
+  47:12  unknown    -                      local 12
+  48:3   unknown    -                      cxx . . $ takesPoint(83fc12429a3823ae).
+  48:14  read       read                   local 10
+  49:3   unknown    -                      cxx . . $ Point#
+  49:9   unknown    definition             local 14
+  49:13  read       read                   local 10
+  50:7   unknown    definition             local 15
+  50:11  read       read                   local 11
+  50:13  unknown    -                      cxx . . $ Holder#get(455f465bc33b4cdf).
+  51:3   unknown    -                      cxx . . $ Point#
+  51:9   unknown    definition             local 16
+  51:14  read       read                   local 12
+  51:17  read       read                   local 13
+  52:10  read       read                   local 15
+  52:14  read       read                   local 14
+  52:16  read       read                   cxx . . $ Point#x.
+  52:20  read       read                   local 16
+  52:22  read       read                   cxx . . $ Point#y.

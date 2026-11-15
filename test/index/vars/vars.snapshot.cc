@@ -114,3 +114,35 @@
 //  ^ reference [..] S#
 //     ^ reference (write) [..] S#y.
   }
+  
+  struct T {
+//       ^ definition [..] T#
+    int x;
+//      ^ definition [..] T#x.
+    int xs[2];
+//      ^^ definition [..] T#xs.
+    T(int x) : x(x), xs{x, x} {}
+//  ^ definition [..] T#T(d4f767463ce0a6b3).
+//        ^ definition local 17
+//             ^ reference (write) [..] T#x.
+//               ^ reference local 17
+//                   ^^ reference (write) [..] T#xs.
+//                      ^ reference local 17
+//                         ^ reference local 17
+  };
+  
+  void enclosing_access(T t) {
+//     ^^^^^^^^^^^^^^^^ definition [..] enclosing_access(e3f7345fc1fbbb07).
+//                      ^ reference [..] T#
+//                        ^ definition local 18
+    int arr[2] = {0, 0};
+//      ^^^ definition local 19
+    arr[1] = 1;
+//  ^^^ reference (write) local 19
+    t.x = 2;
+//  ^ reference (write) local 18
+//    ^ reference (write) [..] T#x.
+    t.xs[0] += 3;
+//  ^ reference (read+write) local 18
+//    ^^ reference (read+write) [..] T#xs.
+  }

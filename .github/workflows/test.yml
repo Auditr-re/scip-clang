@@ -51,8 +51,7 @@ jobs:
           bazel build //indexer:scip-clang --config=dev
           mkdir -p e2e/out
           e2e/run.sh | tee e2e/out/roles.txt
-          grep -q ' write ' e2e/out/roles.txt
-          grep -q ' read+write ' e2e/out/roles.txt
+          diff -u e2e/expected.txt e2e/out/roles.txt
 
       - name: "📦 Upload the sample index"
         if: always()
